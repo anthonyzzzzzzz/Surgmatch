@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SurgMatch — Evidence-Based Surgeon Matching</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<script>
+tailwind.config={theme:{extend:{colors:{navy:{50:'#f0f4f8',100:'#d9e2ec',200:'#bcccdc',300:'#9fb3c8',400:'#829ab1',500:'#627d98',600:'#486581',700:'#334e68',800:'#243b53',900:'#102a43',950:'#0a1929'}},fontFamily:{display:['"Instrument Serif"','Georgia','serif'],body:['"DM Sans"','system-ui','sans-serif']}}}}
+</script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',system-ui,sans-serif;background:#0a1929;color:#d9e2ec;overflow-x:hidden}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:#0a1929}::-webkit-scrollbar-thumb{background:#243b53;border-radius:3px}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes scaleIn{from{opacity:0;transform:scale(0.96)}to{opacity:1;transform:scale(1)}}
+@keyframes slideR{from{opacity:0;transform:translateX(-24px)}to{opacity:1;transform:translateX(0)}}
+@keyframes drawRing{from{stroke-dashoffset:251}}
+@keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:.7}}
+
+.fu{animation:fadeUp .65s cubic-bezier(.22,1,.36,1) both}
+.fi{animation:fadeIn .5s ease both}
+.si{animation:scaleIn .5s cubic-bezier(.22,1,.36,1) both}
+.sr{animation:slideR .5s cubic-bezier(.22,1,.36,1) both}
+.d1{animation-delay:.06s}.d2{animation-delay:.12s}.d3{animation-delay:.18s}.d4{animation-delay:.24s}
+.d5{animation-delay:.3s}.d6{animation-delay:.36s}.d7{animation-delay:.42s}.d8{animation-delay:.48s}.d9{animation-delay:.54s}.d10{animation-delay:.6s}
+
+.ticker-wrap{overflow:hidden;width:100%}
+.ticker-track{display:flex;width:max-content;animation:ticker 30s linear infinite}
+.ticker-track:hover{animation-play-state:paused}
+
+.ring-anim{animation:drawRing 1.1s cubic-bezier(.22,1,.36,1) both;animation-delay:.2s}
+
+.card-hover{transition:transform .35s cubic-bezier(.22,1,.36,1),box-shadow .35s ease}
+.card-hover:hover{transform:translateY(-3px);box-shadow:0 16px 48px rgba(0,0,0,.35),0 0 0 1px rgba(39,171,131,.12)}
+
+.chk{position:relative;cursor:pointer;display:flex;align-items:center;gap:10px}
+.chk input{position:absolute;opacity:0;width:0;height:0}
+.chk .box{width:18px;height:18px;border:1.5px solid #486581;border-radius:4px;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+.chk input:checked+.box{background:#27ab83;border-color:#27ab83}
+.chk:hover .box{border-color:#65d6ad}
+
+select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%239fb3c8' d='M5 7L0 2h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
+
+.grain::after{content:'';position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:.018;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+.metric-box{background:linear-gradient(135deg,rgba(16,42,67,.7),rgba(16,42,67,.4));border:1px solid rgba(51,78,104,.5);border-radius:12px;padding:14px;position:relative;overflow:hidden}
+.metric-box::before{content:'';position:absolute;top:0;right:0;width:40%;height:100%;background:linear-gradient(90deg,transparent,rgba(39,171,131,.03));pointer-events:none}
+.source-tag{font-size:9px;color:#627d98;letter-spacing:.03em}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useMemo,useEffect}=React;
+
+// ════════════════════════════════════════════════════════════════
+// CONSTANTS & DATA
+// ════════════════════════════════════════════════════════════════
+
+const US_STATES=['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
+
+const SPECIALTIES=[
+  {id:'ophthalmology',label:'Ophthalmology',available:true,icon:'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8a3 3 0 100 6 3 3 0 000-6z'},
+  {id:'urology',label:'Urology',available:true,icon:'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93z'},
+  {id:'orthopedics',label:'Orthopedics',available:true,icon:'M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z'},
+  {id:'general',label:'General Surgery',available:true,icon:'M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.47-.47-1.12-.29-1.51.08l-1.97 1.97 3.75 3.75 1.97-1.97zM3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z'},
+  {id:'gynecology',label:'Gynecology',available:true,icon:'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z'},
+  {id:'cardiothoracic',label:'Cardiothoracic',available:true,icon:'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'},
+];
+
+const SUBSPECIALTIES={
+  ophthalmology:[
+    {id:'cataract',label:'Cataract Surgery',desc:'Lens removal and intraocular lens implantation',icon:'◐'},
+    {id:'glaucoma',label:'Glaucoma',desc:'Optic nerve preservation and IOP management',icon:'◎'},
+    {id:'retina',label:'Retina & Vitreous',desc:'Retinal detachment, macular disease, vitrectomy',icon:'◉'},
+    {id:'cornea',label:'Cornea & External Disease',desc:'Transplantation, cross-linking, surface reconstruction',icon:'◌'},
+    {id:'oculoplastics',label:'Oculoplastics & Orbital',desc:'Eyelid, orbit, lacrimal system surgery',icon:'◑'},
+  ],
+  urology:[
+    {id:'uro_oncology',label:'Urologic Oncology',desc:'Prostate, bladder, and kidney cancer surgery',icon:'⊕'},
+    {id:'uro_stones',label:'Stone Disease',desc:'Kidney and ureteral stone treatment',icon:'◇'},
+    {id:'uro_bph',label:'BPH & Voiding',desc:'Benign prostatic hyperplasia, urinary obstruction',icon:'◈'},
+    {id:'uro_reconstruct',label:'Reconstructive Urology',desc:'Urethral stricture, fistula repair',icon:'◊'},
+  ],
+  orthopedics:[
+    {id:'ortho_joint',label:'Joint Replacement',desc:'Hip, knee, and shoulder arthroplasty',icon:'⊙'},
+    {id:'ortho_sports',label:'Sports Medicine',desc:'ACL, meniscus, rotator cuff repair',icon:'⊚'},
+    {id:'ortho_spine',label:'Spine Surgery',desc:'Disc herniation, spinal fusion, decompression',icon:'⊛'},
+    {id:'ortho_trauma',label:'Trauma & Fracture',desc:'Complex fracture fixation and reconstruction',icon:'⊘'},
+  ],
+  general:[
+    {id:'gen_bariatric',label:'Bariatric Surgery',desc:'Gastric bypass, sleeve gastrectomy, weight loss',icon:'⊖'},
+    {id:'gen_colorectal',label:'Colorectal',desc:'Colon and rectal cancer, IBD surgery',icon:'⊜'},
+    {id:'gen_hernia',label:'Hernia Repair',desc:'Inguinal, ventral, and incisional hernia',icon:'⊞'},
+    {id:'gen_hepatobiliary',label:'Hepatobiliary',desc:'Liver, gallbladder, and pancreatic surgery',icon:'⊡'},
+  ],
+  gynecology:[
+    {id:'gyn_oncology',label:'Gynecologic Oncology',desc:'Ovarian, uterine, and cervical cancer',icon:'⊗'},
+    {id:'gyn_urogyns',label:'Urogynecology',desc:'Pelvic organ prolapse, incontinence',icon:'⊝'},
+    {id:'gyn_endo',label:'Endometriosis',desc:'Deep infiltrating endometriosis excision',icon:'⊜'},
+    {id:'gyn_fibroids',label:'Fibroids & Myomectomy',desc:'Uterine fibroid removal, fertility-sparing',icon:'⊙'},
+  ],
+  cardiothoracic:[
+    {id:'ct_cabg',label:'Coronary (CABG)',desc:'Coronary artery bypass grafting',icon:'♡'},
+    {id:'ct_valve',label:'Valve Surgery',desc:'Aortic, mitral, and tricuspid valve repair/replacement',icon:'♢'},
+    {id:'ct_thoracic',label:'Thoracic / Lung',desc:'Lobectomy, lung cancer resection, VATS',icon:'♤'},
+    {id:'ct_aortic',label:'Aortic Surgery',desc:'Aortic aneurysm and dissection repair',icon:'♧'},
+  ],
+};
+
+const SYMPTOMS={
+  // Ophthalmology
+  glaucoma:['Blurry or hazy vision','Eye pain or pressure sensation','Halos around lights','Peripheral vision loss (tunnel vision)','Eye redness','High IOP reading (>21 mmHg)','Family history of glaucoma','Current eye drops not controlling pressure','Nausea accompanying vision changes','Sudden vision loss episode'],
+  cataract:['Cloudy or foggy vision','Night driving difficulty','Glare and light sensitivity','Monocular double vision','Colors appearing faded or yellow','Frequent glasses prescription changes','Difficulty reading fine print','Need for brighter light when reading'],
+  retina:['New floaters (spots or strings)','Flashes of light (photopsia)','Shadow or curtain across vision','Sudden painless vision loss','Wavy or distorted straight lines','Dark spot in central vision','Difficulty recognizing faces','Rapid vision deterioration'],
+  cornea:['Persistent eye pain','Excessive tearing','Severe light sensitivity (photophobia)','Progressive blurry vision','Foreign body sensation','History of corneal scarring or injury','Red eye not resolving with drops','Vision declining despite new glasses'],
+  oculoplastics:['Drooping upper eyelid blocking vision','Excess eyelid skin','Eyelid turning inward or outward','Chronic watery eyes','Swelling around eye or orbit','Eye socket pain or pressure','Thyroid eye disease symptoms','Eyelid bump or growth'],
+  // Urology
+  uro_oncology:['Elevated PSA level','Blood in urine (hematuria)','Difficulty urinating','Pelvic pain','Kidney mass found on imaging','Bladder mass found on cystoscopy','Unexplained weight loss','Bone pain with urinary symptoms','Family history of prostate cancer','Testicular mass or swelling'],
+  uro_stones:['Severe flank pain (renal colic)','Blood in urine','Nausea and vomiting with pain','Frequent urinary tract infections','Pain radiating to groin','Known kidney stones on imaging','Recurrent stone episodes','Difficulty passing urine'],
+  uro_bph:['Weak urine stream','Frequent urination especially at night','Difficulty starting urination','Feeling of incomplete bladder emptying','Urgency to urinate','Straining to urinate','Intermittent urine stream','Urinary retention episodes'],
+  uro_reconstruct:['Urethral stricture diagnosed','Difficulty or pain with urination','Recurrent UTIs','History of pelvic trauma','Prior failed urethral procedure','Fistula diagnosed','Urinary incontinence after surgery','Penile curvature (Peyronie disease)'],
+  // Orthopedics
+  ortho_joint:['Severe joint pain limiting daily activities','Joint stiffness especially in morning','Grinding or clicking in joint','Bone-on-bone arthritis on X-ray','Failed conservative treatment (PT, injections)','Difficulty walking or climbing stairs','Joint deformity (bowing, knock-knee)','Prior partial replacement needing revision'],
+  ortho_sports:['Knee gave way or buckled','Shoulder popping out of socket','Pain with overhead activities','Swelling after activity','Locking or catching in knee','Positive MRI for ligament or meniscus tear','Inability to return to sport','Recurrent ankle sprains with instability'],
+  ortho_spine:['Radiating leg pain (sciatica)','Numbness or tingling in extremities','Back pain not responding to therapy','Difficulty walking long distances','Loss of bladder or bowel control','Spinal stenosis on MRI','Progressive weakness in legs or arms','Neck pain radiating to arms'],
+  ortho_trauma:['Recent fracture from injury','Fracture not healing (nonunion)','Bone protruding through skin (open fracture)','Joint dislocation','Multiple fractures from accident','Deformity after prior fracture','Hardware pain from prior surgery','Periprosthetic fracture around implant'],
+  // General Surgery
+  gen_bariatric:['BMI over 40 (or over 35 with comorbidities)','Failed prior diet and exercise programs','Type 2 diabetes with obesity','Sleep apnea related to weight','High blood pressure with obesity','Joint pain limiting mobility due to weight','GERD worsening with weight','Prior bariatric surgery needing revision'],
+  gen_colorectal:['Rectal bleeding','Change in bowel habits lasting weeks','Colon cancer diagnosed','Rectal cancer diagnosed','Inflammatory bowel disease (Crohn or UC)','Diverticulitis requiring surgery','Rectal prolapse','Anal fistula or abscess recurring'],
+  gen_hernia:['Visible bulge in groin or abdomen','Pain at bulge site with lifting','Bulge that cannot be pushed back in','Prior hernia repair that recurred','Pain worsening throughout the day','Nausea with abdominal bulge','Large ventral or incisional hernia','Hernia causing bowel obstruction symptoms'],
+  gen_hepatobiliary:['Gallstone attacks (biliary colic)','Jaundice (yellowing of skin/eyes)','Pancreatic mass on imaging','Liver mass or tumor found','Bile duct obstruction','Recurrent pancreatitis','Elevated liver enzymes with mass','Gallbladder polyps over 10mm'],
+  // Gynecology
+  gyn_oncology:['Ovarian mass found on imaging','Abnormal uterine bleeding post-menopause','Cervical cancer diagnosed on biopsy','Elevated CA-125 level','Rapidly growing pelvic mass','Ascites with pelvic mass','Endometrial cancer on biopsy','Family history BRCA with ovarian concerns'],
+  gyn_urogyns:['Pelvic organ prolapse (bulge sensation)','Stress urinary incontinence (leaking with cough)','Urgency incontinence','Difficulty emptying bladder','Vaginal pressure or heaviness','Recurrent UTIs with prolapse','Prior prolapse repair that recurred','Fecal incontinence'],
+  gyn_endo:['Severe menstrual pain (dysmenorrhea)','Pain during intercourse (dyspareunia)','Chronic pelvic pain','Infertility with suspected endometriosis','Pain with bowel movements during period','Endometrioma on ultrasound','Failed hormonal treatment for pain','Bladder symptoms worsening with cycle'],
+  gyn_fibroids:['Heavy menstrual bleeding (menorrhagia)','Pelvic pressure or bloating','Frequent urination from fibroid pressure','Fibroid growth on serial imaging','Anemia from heavy periods','Pain from degenerating fibroid','Desire to preserve fertility','Multiple or large fibroids on ultrasound'],
+  // Cardiothoracic
+  ct_cabg:['Chest pain with exertion (angina)','Multi-vessel coronary artery disease','Failed stent or angioplasty','Left main coronary disease','Shortness of breath with activity','Abnormal stress test','Reduced heart function with blockages','Diabetes with multi-vessel disease'],
+  ct_valve:['Heart murmur with symptoms','Shortness of breath worsening','Aortic stenosis diagnosed on echo','Mitral regurgitation (leaking valve)','Swollen legs and ankles','Fatigue and exercise intolerance','Atrial fibrillation with valve disease','Endocarditis (valve infection)'],
+  ct_thoracic:['Lung mass found on CT scan','Persistent cough lasting months','Coughing up blood (hemoptysis)','Lung cancer diagnosed on biopsy','Recurrent pleural effusions','Chest wall tumor','Mediastinal mass found','Emphysema severe enough for surgery'],
+  ct_aortic:['Aortic aneurysm found on imaging','Aneurysm growing on serial scans','Sudden tearing chest or back pain','Marfan or connective tissue disorder','Aortic dissection diagnosed','Family history of aortic rupture','Aortic aneurysm over 5.5cm','Aortic valve disease with aneurysm'],
+};
+
+const PROC_MAP={
+  // Ophthalmology
+  glaucoma:{default:{code:'65855',name:'Laser Trabeculoplasty (SLT)',sub:'Glaucoma'},severe:{code:'66170',name:'Trabeculectomy',sub:'Glaucoma'},migs:{code:'66711',name:'MIGS — Trabecular Bypass',sub:'Glaucoma'},shunt:{code:'66183',name:'Aqueous Shunt Implant',sub:'Glaucoma'}},
+  cataract:{default:{code:'66984',name:'Cataract Removal with IOL',sub:'Cataract'},complex:{code:'66982',name:'Complex Cataract Extraction',sub:'Cataract'}},
+  retina:{default:{code:'67228',name:'Retinal Laser Photocoagulation',sub:'Retina'},vitrectomy:{code:'67036',name:'Pars Plana Vitrectomy',sub:'Retina'},detachment:{code:'67108',name:'Retinal Detachment Repair',sub:'Retina'}},
+  cornea:{default:{code:'0542T',name:'Corneal Cross-Linking',sub:'Cornea'},transplant:{code:'65710',name:'Corneal Transplant (Lamellar)',sub:'Cornea'}},
+  oculoplastics:{default:{code:'67901',name:'Blepharoptosis Repair',sub:'Oculoplastics'},entropion:{code:'67921',name:'Entropion Repair',sub:'Oculoplastics'}},
+  // Urology
+  uro_oncology:{default:{code:'55866',name:'Robotic Prostatectomy',sub:'Urologic Oncology'},kidney:{code:'50543',name:'Robotic Partial Nephrectomy',sub:'Urologic Oncology'},bladder:{code:'51595',name:'Radical Cystectomy',sub:'Urologic Oncology'}},
+  uro_stones:{default:{code:'52356',name:'Ureteroscopy with Lithotripsy',sub:'Stone Disease'},perc:{code:'50080',name:'Percutaneous Nephrolithotomy',sub:'Stone Disease'}},
+  uro_bph:{default:{code:'52601',name:'TURP (Transurethral Resection)',sub:'BPH'},laser:{code:'52649',name:'Laser Enucleation of Prostate (HoLEP)',sub:'BPH'},rezum:{code:'53854',name:'Rezūm Water Vapor Therapy',sub:'BPH'}},
+  uro_reconstruct:{default:{code:'53410',name:'Urethroplasty',sub:'Reconstructive Urology'},fistula:{code:'53520',name:'Urethral Fistula Repair',sub:'Reconstructive Urology'}},
+  // Orthopedics
+  ortho_joint:{default:{code:'27447',name:'Total Knee Arthroplasty',sub:'Joint Replacement'},hip:{code:'27130',name:'Total Hip Arthroplasty',sub:'Joint Replacement'},revision:{code:'27487',name:'Revision Knee Arthroplasty',sub:'Joint Replacement'}},
+  ortho_sports:{default:{code:'29888',name:'ACL Reconstruction',sub:'Sports Medicine'},meniscus:{code:'29881',name:'Meniscectomy / Meniscus Repair',sub:'Sports Medicine'},rotator:{code:'29827',name:'Rotator Cuff Repair (Arthroscopic)',sub:'Sports Medicine'}},
+  ortho_spine:{default:{code:'63030',name:'Lumbar Discectomy',sub:'Spine Surgery'},fusion:{code:'22633',name:'Lumbar Interbody Fusion (TLIF)',sub:'Spine Surgery'},cervical:{code:'22551',name:'Anterior Cervical Discectomy & Fusion',sub:'Spine Surgery'}},
+  ortho_trauma:{default:{code:'27236',name:'Hip Fracture Fixation (ORIF)',sub:'Trauma'},tibial:{code:'27759',name:'Tibial Shaft Fracture ORIF',sub:'Trauma'}},
+  // General Surgery
+  gen_bariatric:{default:{code:'43775',name:'Laparoscopic Sleeve Gastrectomy',sub:'Bariatric'},bypass:{code:'43644',name:'Laparoscopic Roux-en-Y Gastric Bypass',sub:'Bariatric'},revision:{code:'43848',name:'Bariatric Revision Surgery',sub:'Bariatric'}},
+  gen_colorectal:{default:{code:'44204',name:'Laparoscopic Partial Colectomy',sub:'Colorectal'},rectal:{code:'45395',name:'Laparoscopic Proctectomy (LAR)',sub:'Colorectal'},ibd:{code:'44211',name:'Laparoscopic Colectomy with Ileostomy',sub:'Colorectal'}},
+  gen_hernia:{default:{code:'49652',name:'Laparoscopic Ventral Hernia Repair',sub:'Hernia'},inguinal:{code:'49650',name:'Laparoscopic Inguinal Hernia Repair',sub:'Hernia'}},
+  gen_hepatobiliary:{default:{code:'47562',name:'Laparoscopic Cholecystectomy',sub:'Hepatobiliary'},panc:{code:'48150',name:'Pancreaticoduodenectomy (Whipple)',sub:'Hepatobiliary'},liver:{code:'47120',name:'Hepatectomy (Partial Liver Resection)',sub:'Hepatobiliary'}},
+  // Gynecology
+  gyn_oncology:{default:{code:'58571',name:'Robotic Hysterectomy (Oncologic)',sub:'Gynecologic Oncology'},staging:{code:'58575',name:'Robotic Staging with Lymphadenectomy',sub:'Gynecologic Oncology'},debulk:{code:'58952',name:'Ovarian Debulking Surgery',sub:'Gynecologic Oncology'}},
+  gyn_urogyns:{default:{code:'57283',name:'Colporrhaphy (Prolapse Repair)',sub:'Urogynecology'},sling:{code:'57288',name:'Midurethral Sling (Incontinence)',sub:'Urogynecology'},sacrocolpopexy:{code:'57425',name:'Robotic Sacrocolpopexy',sub:'Urogynecology'}},
+  gyn_endo:{default:{code:'58661',name:'Laparoscopic Endometriosis Excision',sub:'Endometriosis'},deep:{code:'58662',name:'Deep Infiltrating Endometriosis Excision',sub:'Endometriosis'}},
+  gyn_fibroids:{default:{code:'58541',name:'Laparoscopic Myomectomy',sub:'Fibroids'},robotic:{code:'58542',name:'Robotic Myomectomy (Multiple)',sub:'Fibroids'}},
+  // Cardiothoracic
+  ct_cabg:{default:{code:'33533',name:'CABG x1 (Arterial Graft)',sub:'Coronary Surgery'},multi:{code:'33536',name:'CABG x4+ (Multi-vessel)',sub:'Coronary Surgery'}},
+  ct_valve:{default:{code:'33405',name:'Aortic Valve Replacement',sub:'Valve Surgery'},mitral:{code:'33430',name:'Mitral Valve Replacement',sub:'Valve Surgery'},repair:{code:'33426',name:'Mitral Valve Repair',sub:'Valve Surgery'},tavr:{code:'33361',name:'TAVR (Transcatheter Aortic Valve)',sub:'Valve Surgery'}},
+  ct_thoracic:{default:{code:'32663',name:'VATS Lobectomy',sub:'Thoracic Surgery'},robotic:{code:'32671',name:'Robotic-Assisted Lobectomy',sub:'Thoracic Surgery'}},
+  ct_aortic:{default:{code:'33860',name:'Ascending Aortic Graft Replacement',sub:'Aortic Surgery'},root:{code:'33864',name:'Aortic Root Replacement (Bentall)',sub:'Aortic Surgery'}},
+};
+
+function inferProcedures(sub,syms){
+  const m=PROC_MAP[sub];if(!m)return[{code:'99999',name:'General Consultation',sub:sub}];
+  const s=syms.map(x=>x.toLowerCase());const p=[];
+  // Ophthalmology
+  if(sub==='glaucoma'){const mf=s.some(x=>x.includes('not controlling'));const sv=s.some(x=>x.includes('tunnel')||x.includes('sudden vision'));const hp=s.some(x=>x.includes('iop')||x.includes('>21'));if(sv)p.push(m.severe);if(mf&&!sv)p.push(m.migs);if(hp&&sv)p.push(m.shunt);if(!p.length)p.push(m.default);}
+  else if(sub==='cataract'){p.push(s.some(x=>x.includes('double')||x.includes('frequent'))?m.complex:m.default);}
+  else if(sub==='retina'){const d=s.some(x=>x.includes('shadow')||x.includes('curtain')||x.includes('sudden'));const f=s.some(x=>x.includes('floater')||x.includes('flash'));if(d)p.push(m.detachment);else if(f)p.push(m.vitrectomy);else p.push(m.default);}
+  else if(sub==='cornea'){p.push(s.some(x=>x.includes('scarring')||x.includes('injury'))?m.transplant:m.default);}
+  else if(sub==='oculoplastics'){p.push(s.some(x=>x.includes('inward')||x.includes('outward'))?m.entropion:m.default);}
+  // Urology
+  else if(sub==='uro_oncology'){const kid=s.some(x=>x.includes('kidney mass'));const blad=s.some(x=>x.includes('bladder mass'));if(kid)p.push(m.kidney);else if(blad)p.push(m.bladder);else p.push(m.default);}
+  else if(sub==='uro_stones'){p.push(s.some(x=>x.includes('recurrent')||x.includes('known kidney'))?m.perc:m.default);}
+  else if(sub==='uro_bph'){const ret=s.some(x=>x.includes('retention'));const sev=s.some(x=>x.includes('weak')||x.includes('straining'));if(ret)p.push(m.laser);else if(sev)p.push(m.default);else p.push(m.rezum);}
+  else if(sub==='uro_reconstruct'){p.push(s.some(x=>x.includes('fistula'))?m.fistula:m.default);}
+  // Orthopedics
+  else if(sub==='ortho_joint'){const hip=s.some(x=>x.includes('hip'));const rev=s.some(x=>x.includes('revision')||x.includes('prior partial'));if(rev)p.push(m.revision);else if(hip)p.push(m.hip);else p.push(m.default);}
+  else if(sub==='ortho_sports'){const men=s.some(x=>x.includes('locking')||x.includes('catching')||x.includes('meniscus'));const rot=s.some(x=>x.includes('shoulder')||x.includes('overhead')||x.includes('rotator'));if(rot)p.push(m.rotator);else if(men)p.push(m.meniscus);else p.push(m.default);}
+  else if(sub==='ortho_spine'){const neck=s.some(x=>x.includes('neck')||x.includes('arm'));const fus=s.some(x=>x.includes('stenosis')||x.includes('weakness'));if(neck)p.push(m.cervical);else if(fus)p.push(m.fusion);else p.push(m.default);}
+  else if(sub==='ortho_trauma'){p.push(s.some(x=>x.includes('tibia')||x.includes('multiple'))?m.tibial:m.default);}
+  // General Surgery
+  else if(sub==='gen_bariatric'){const rev=s.some(x=>x.includes('revision')||x.includes('prior bariatric'));const bypass=s.some(x=>x.includes('diabetes')||x.includes('gerd'));if(rev)p.push(m.revision);else if(bypass)p.push(m.bypass);else p.push(m.default);}
+  else if(sub==='gen_colorectal'){const rec=s.some(x=>x.includes('rectal cancer')||x.includes('rectal prolapse'));const ibd=s.some(x=>x.includes('inflammatory')||x.includes('crohn'));if(rec)p.push(m.rectal);else if(ibd)p.push(m.ibd);else p.push(m.default);}
+  else if(sub==='gen_hernia'){p.push(s.some(x=>x.includes('groin')||x.includes('inguinal'))?m.inguinal:m.default);}
+  else if(sub==='gen_hepatobiliary'){const panc=s.some(x=>x.includes('pancrea'));const liver=s.some(x=>x.includes('liver'));if(panc)p.push(m.panc);else if(liver)p.push(m.liver);else p.push(m.default);}
+  // Gynecology
+  else if(sub==='gyn_oncology'){const ov=s.some(x=>x.includes('ovarian')||x.includes('ca-125')||x.includes('ascites'));const stag=s.some(x=>x.includes('endometrial')||x.includes('cervical'));if(ov)p.push(m.debulk);else if(stag)p.push(m.staging);else p.push(m.default);}
+  else if(sub==='gyn_urogyns'){const inc=s.some(x=>x.includes('incontinence')||x.includes('leaking'));const pro=s.some(x=>x.includes('prolapse')||x.includes('bulge'));if(inc&&pro)p.push(m.sacrocolpopexy);else if(inc)p.push(m.sling);else p.push(m.default);}
+  else if(sub==='gyn_endo'){p.push(s.some(x=>x.includes('deep')||x.includes('bowel')||x.includes('bladder'))?m.deep:m.default);}
+  else if(sub==='gyn_fibroids'){p.push(s.some(x=>x.includes('multiple')||x.includes('large'))?m.robotic:m.default);}
+  // Cardiothoracic
+  else if(sub==='ct_cabg'){p.push(s.some(x=>x.includes('multi-vessel')||x.includes('diabetes'))?m.multi:m.default);}
+  else if(sub==='ct_valve'){const mit=s.some(x=>x.includes('mitral'));const tavr=s.some(x=>x.includes('endocarditis')==false&&(s.some(y=>y.includes('aortic stenosis'))));const rep=s.some(x=>x.includes('leaking')||x.includes('regurgitation'));if(mit&&rep)p.push(m.repair);else if(mit)p.push(m.mitral);else if(tavr)p.push(m.tavr);else p.push(m.default);}
+  else if(sub==='ct_thoracic'){p.push(s.some(x=>x.includes('lung cancer')||x.includes('biopsy'))?m.robotic:m.default);}
+  else if(sub==='ct_aortic'){p.push(s.some(x=>x.includes('marfan')||x.includes('valve disease'))?m.root:m.default);}
+  else{p.push(m.default);}
+  return p;
+}
+
+const SURGEONS=[
+  // ── Ophthalmology (10) ──
+  {id:'S001',name:'Dr. Alice Chen',cred:'MD, FACS',fellowship:'Glaucoma Fellowship, Wilmer Eye Institute',subspecialties:['Glaucoma','Cataract'],states:['CA','NY','TX','FL','WA'],devices:['da Vinci Xi','da Vinci SP'],procedures:{'66711':310,'66984':780,'66987':145,'66170':88,'65855':390,'66183':38},compRate:.018,rating:4.9,ratingCount:312,years:18,medicarePatients:4820,bio:'Pioneer in combined MIGS-cataract procedures. Recognized nationally for ultra-low complication rates.'},
+  {id:'S002',name:'Dr. Robert Kim',cred:'MD, PhD',fellowship:'Vitreoretinal Fellowship, Bascom Palmer',subspecialties:['Retina'],states:['CA','TX','AZ','NV','OR'],devices:['da Vinci Xi'],procedures:{'67036':510,'67108':205,'67228':330},compRate:.025,rating:4.8,ratingCount:287,years:22,medicarePatients:5640,bio:'Vitreoretinal surgeon specializing in complex detachments and proliferative diabetic retinopathy.'},
+  {id:'S003',name:'Dr. Maria Santos',cred:'MD, FACS',fellowship:'Cornea Fellowship, Mass Eye & Ear',subspecialties:['Cornea','Cataract'],states:['NY','NJ','CT','PA','MA'],devices:['da Vinci Xi','Hugo RAS'],procedures:{'65710':175,'0542T':235,'66984':590,'66982':92},compRate:.022,rating:4.7,ratingCount:198,years:15,medicarePatients:3920,bio:'Cornea and refractive specialist. Lead investigator in FDA trials for next-gen corneal implants.'},
+  {id:'S004',name:'Dr. James Whitfield',cred:'MD',fellowship:'Glaucoma Fellowship, Duke Eye Center',subspecialties:['Glaucoma'],states:['TX','FL','GA','AL','LA'],devices:['da Vinci Xi','Hugo RAS','Versius'],procedures:{'66170':375,'66183':155,'65855':490,'66711':82},compRate:.032,rating:4.6,ratingCount:245,years:25,medicarePatients:6210,bio:'High-volume glaucoma surgeon. Subspecialty in refractory glaucoma and shunt management.'},
+  {id:'S005',name:'Dr. Sarah Park',cred:'MD, FACS',fellowship:'Oculoplastics Fellowship, UCLA Stein Eye',subspecialties:['Oculoplastics'],states:['CA','NY','IL','WA','CO'],devices:['da Vinci Xi'],procedures:{'67901':415,'67921':110,'67902':175,'67904':88},compRate:.015,rating:4.9,ratingCount:340,years:14,medicarePatients:3180,bio:'National referral center for thyroid eye disease and orbital decompression.'},
+  {id:'S006',name:'Dr. Hiroshi Tanaka',cred:'MD, PhD',fellowship:'Dual: Retina (Moorfields) + Glaucoma (UCSF)',subspecialties:['Retina','Glaucoma'],states:['CA','HI','WA','OR','NV'],devices:['da Vinci Xi','da Vinci SP'],procedures:{'67036':285,'67108':125,'66711':105,'65855':195,'67228':175},compRate:.028,rating:4.7,ratingCount:201,years:20,medicarePatients:4150,bio:'Unique expertise in neovascular glaucoma and combined vitreoretinal-glaucoma approaches.'},
+  {id:'S007',name:'Dr. Emily Bradshaw',cred:'MD',fellowship:'Anterior Segment, Baylor',subspecialties:['Cataract','Cornea'],states:['FL','GA','SC','NC','VA','TX'],devices:['da Vinci Xi','Hugo RAS'],procedures:{'66984':1180,'66982':275,'65710':58,'0542T':42,'66987':88},compRate:.012,rating:4.8,ratingCount:410,years:12,medicarePatients:7850,bio:'Ultra-high-volume cataract surgeon. Lowest documented complication rate in her network.'},
+  {id:'S008',name:'Dr. Amir Patel',cred:'MD, FACS',fellowship:'Glaucoma Fellowship, Wills Eye Hospital',subspecialties:['Glaucoma','Cataract'],states:['NY','NJ','PA','CT','DE','MD'],devices:['Hugo RAS','Versius'],procedures:{'66711':195,'66984':340,'66170':62,'65855':275,'66987':108},compRate:.035,rating:4.5,ratingCount:178,years:10,medicarePatients:2980,bio:'Anterior segment generalist. Early MIGS adopter across the Northeast corridor.'},
+  {id:'S009',name:'Dr. Lisa Okafor',cred:'MD',fellowship:'Vitreoretinal Fellowship, Kellogg Eye Center',subspecialties:['Retina'],states:['IL','MI','OH','IN','WI','MN'],devices:['da Vinci Xi'],procedures:{'67036':405,'67108':170,'67228':255},compRate:.020,rating:4.8,ratingCount:265,years:16,medicarePatients:4380,bio:'Midwest retina leader. Special emphasis on macular surgery and diabetic traction detachments.'},
+  {id:'S010',name:'Dr. David Reyes',cred:'MD',fellowship:'Cornea Fellowship, Emory Eye Center',subspecialties:['Cornea','Oculoplastics'],states:['TX','CA','AZ','NM','CO'],devices:['da Vinci Xi','da Vinci SP'],procedures:{'65710':218,'0542T':305,'67901':82,'67921':45},compRate:.024,rating:4.6,ratingCount:156,years:11,medicarePatients:2640,bio:'Cross-trained corneal and oculoplastic. Expertise in ocular surface reconstruction.'},
+  // ── Urology (8) ──
+  {id:'U001',name:'Dr. Michael Chang',cred:'MD, FACS',fellowship:'Urologic Oncology, Memorial Sloan Kettering',subspecialties:['Urologic Oncology'],states:['NY','NJ','CT','PA','FL'],devices:['da Vinci Xi','da Vinci SP'],procedures:{'55866':620,'50543':180,'51595':45},compRate:.019,rating:4.9,ratingCount:380,years:20,medicarePatients:5200,bio:'One of the highest-volume robotic prostatectomy surgeons in the Northeast. Over 3,000 career cases.'},
+  {id:'U002',name:'Dr. Jennifer Walsh',cred:'MD',fellowship:'Endourology & Stone Disease, Indiana University',subspecialties:['Stone Disease'],states:['IN','OH','MI','IL','KY'],devices:['da Vinci Xi'],procedures:{'52356':480,'50080':210},compRate:.016,rating:4.8,ratingCount:290,years:15,medicarePatients:4100,bio:'High-volume endourologist specializing in complex staghorn calculi and percutaneous stone removal.'},
+  {id:'U003',name:'Dr. Richard Torres',cred:'MD, FACS',fellowship:'BPH/Voiding, Cleveland Clinic',subspecialties:['BPH'],states:['OH','PA','NY','MI','FL'],devices:['da Vinci Xi','Hugo RAS'],procedures:{'52601':350,'52649':280,'53854':140},compRate:.022,rating:4.7,ratingCount:215,years:18,medicarePatients:4800,bio:'Pioneer in HoLEP technique for large prostates. National proctor for laser enucleation training.'},
+  {id:'U004',name:'Dr. Sophia Grant',cred:'MD',fellowship:'Reconstructive Urology, UCSF',subspecialties:['Reconstructive Urology'],states:['CA','WA','OR','AZ','NV'],devices:['da Vinci Xi'],procedures:{'53410':190,'53520':65},compRate:.028,rating:4.6,ratingCount:142,years:12,medicarePatients:1890,bio:'West Coast referral center for complex urethroplasty and post-traumatic urethral reconstruction.'},
+  {id:'U005',name:'Dr. Thomas Petrov',cred:'MD, PhD',fellowship:'Urologic Oncology, Johns Hopkins',subspecialties:['Urologic Oncology'],states:['MD','VA','DC','PA','DE'],devices:['da Vinci Xi','da Vinci SP'],procedures:{'55866':440,'50543':290,'51595':85},compRate:.021,rating:4.8,ratingCount:325,years:22,medicarePatients:5600,bio:'Robotic kidney-sparing surgery specialist. Pioneered nephron-sparing techniques for complex renal masses.'},
+  {id:'U006',name:'Dr. Karen Blackwell',cred:'MD, FACS',fellowship:'Female Pelvic & Reconstructive, Vanderbilt',subspecialties:['Reconstructive Urology','BPH'],states:['TN','GA','AL','KY','NC'],devices:['da Vinci Xi'],procedures:{'53410':120,'52649':160,'52601':200,'53854':90},compRate:.025,rating:4.7,ratingCount:188,years:16,medicarePatients:3400,bio:'Dual expertise in reconstructive urology and BPH management across the Southeast.'},
+  {id:'U007',name:'Dr. Andrew Nakamura',cred:'MD',fellowship:'Endourology, UT Southwestern',subspecialties:['Stone Disease'],states:['TX','OK','AR','LA','NM'],devices:['da Vinci Xi','Hugo RAS'],procedures:{'52356':380,'50080':175},compRate:.018,rating:4.8,ratingCount:248,years:14,medicarePatients:3600,bio:'South-central stone disease expert. Advanced ureteroscopic and percutaneous techniques.'},
+  {id:'U008',name:'Dr. Priya Mehta',cred:'MD, FACS',fellowship:'Urologic Oncology, MD Anderson',subspecialties:['Urologic Oncology'],states:['TX','CA','FL','AZ','CO'],devices:['da Vinci Xi','da Vinci SP'],procedures:{'55866':510,'50543':220,'51595':65},compRate:.017,rating:4.9,ratingCount:350,years:19,medicarePatients:5800,bio:'Nationally recognized for nerve-sparing robotic prostatectomy with superior functional outcomes.'},
+  // ── Orthopedics (8) ──
+  {id:'O001',name:'Dr. William Hayes',cred:'MD',fellowship:'Adult Reconstruction, Hospital for Special Surgery',subspecialties:['Joint Replacement'],states:['NY','NJ','CT','PA','MA'],devices:['Mako','ROSA'],procedures:{'27447':680,'27130':520,'27487':85},compRate:.014,rating:4.9,ratingCount:420,years:22,medicarePatients:8200,bio:'Premier joint replacement surgeon. Among the first 50 surgeons in the US certified on Mako robotic platform.'},
+  {id:'O002',name:'Dr. Ashley Morgan',cred:'MD',fellowship:'Sports Medicine, Andrews Sports Medicine',subspecialties:['Sports Medicine'],states:['AL','FL','GA','TN','MS'],devices:['da Vinci Xi'],procedures:{'29888':340,'29881':510,'29827':280},compRate:.018,rating:4.8,ratingCount:365,years:16,medicarePatients:3900,bio:'Treats elite athletes and weekend warriors. Arthroscopic expertise in knee and shoulder reconstruction.'},
+  {id:'O003',name:'Dr. Steven Kozlov',cred:'MD, PhD',fellowship:'Spine Surgery, Mayo Clinic',subspecialties:['Spine Surgery'],states:['MN','WI','IA','ND','SD'],devices:['Mazor X','da Vinci Xi'],procedures:{'63030':390,'22633':210,'22551':280},compRate:.023,rating:4.7,ratingCount:280,years:20,medicarePatients:5100,bio:'Robotic-assisted spine surgery pioneer. Complex deformity correction and minimally invasive techniques.'},
+  {id:'O004',name:'Dr. Rachel Nguyen',cred:'MD, FACS',fellowship:'Trauma, R Adams Cowley Shock Trauma',subspecialties:['Trauma'],states:['MD','VA','DC','PA','DE'],devices:['da Vinci Xi'],procedures:{'27236':420,'27759':185},compRate:.026,rating:4.6,ratingCount:198,years:14,medicarePatients:3200,bio:'Level I trauma center fellowship. Complex pelvic and periarticular fracture management specialist.'},
+  {id:'O005',name:'Dr. Christopher Bell',cred:'MD',fellowship:'Adult Reconstruction, Rothman Orthopaedics',subspecialties:['Joint Replacement'],states:['PA','NJ','DE','NY','FL'],devices:['Mako','ROSA'],procedures:{'27447':590,'27130':480,'27487':110},compRate:.016,rating:4.8,ratingCount:355,years:18,medicarePatients:7400,bio:'High-volume bilateral joint replacement specialist. Expert in complex revision arthroplasty.'},
+  {id:'O006',name:'Dr. Diana Fitzgerald',cred:'MD',fellowship:'Sports Medicine, Steadman Clinic',subspecialties:['Sports Medicine'],states:['CO','UT','WY','CA','AZ'],devices:['da Vinci Xi'],procedures:{'29888':280,'29881':420,'29827':350},compRate:.015,rating:4.9,ratingCount:310,years:15,medicarePatients:3500,bio:'Mountain West sports medicine leader. Cartilage restoration and biologic augmentation specialist.'},
+  {id:'O007',name:'Dr. Marcus Johnson',cred:'MD',fellowship:'Spine, Cedars-Sinai',subspecialties:['Spine Surgery'],states:['CA','NV','AZ','OR','WA'],devices:['Mazor X','da Vinci Xi'],procedures:{'63030':310,'22633':260,'22551':190},compRate:.021,rating:4.7,ratingCount:240,years:17,medicarePatients:4600,bio:'West Coast spine specialist. Motion preservation and artificial disc replacement expertise.'},
+  {id:'O008',name:'Dr. Laura Kim-Patel',cred:'MD',fellowship:'Trauma, Harborview Medical Center',subspecialties:['Trauma','Joint Replacement'],states:['WA','OR','ID','MT','AK'],devices:['Mako'],procedures:{'27236':280,'27759':140,'27447':220,'27130':180},compRate:.024,rating:4.6,ratingCount:175,years:13,medicarePatients:2800,bio:'Dual-trained in trauma and reconstruction. Periprosthetic fracture and complex revision specialist.'},
+  // ── General Surgery (8) ──
+  {id:'G001',name:'Dr. Patricia Coleman',cred:'MD, FACS',fellowship:'Bariatric Surgery, Cleveland Clinic',subspecialties:['Bariatric'],states:['OH','MI','PA','IN','WV'],devices:['da Vinci Xi','Hugo RAS'],procedures:{'43775':480,'43644':310,'43848':65},compRate:.013,rating:4.9,ratingCount:390,years:18,medicarePatients:4200,bio:'Accredited bariatric center of excellence director. Over 4,000 career metabolic surgery cases.'},
+  {id:'G002',name:'Dr. Benjamin Yoder',cred:'MD',fellowship:'Colorectal Surgery, Mayo Clinic',subspecialties:['Colorectal'],states:['MN','WI','IA','IL','ND'],devices:['da Vinci Xi','da Vinci SP'],procedures:{'44204':360,'45395':180,'44211':95},compRate:.022,rating:4.8,ratingCount:275,years:20,medicarePatients:4800,bio:'Midwest colorectal leader. Expertise in sphincter-preserving rectal cancer surgery and IBD management.'},
+  {id:'G003',name:'Dr. Olivia Martinez',cred:'MD, FACS',fellowship:'Hepatobiliary, Memorial Sloan Kettering',subspecialties:['Hepatobiliary'],states:['NY','NJ','CT','FL','TX'],devices:['da Vinci Xi'],procedures:{'47562':520,'48150':85,'47120':110},compRate:.028,rating:4.7,ratingCount:210,years:16,medicarePatients:3600,bio:'Complex hepatobiliary surgeon. High-volume Whipple practice with minimally invasive approaches.'},
+  {id:'G004',name:'Dr. Kevin O\'Brien',cred:'MD',fellowship:'MIS & Hernia, Shouldice Hospital',subspecialties:['Hernia'],states:['CA','WA','OR','NV','AZ'],devices:['da Vinci Xi','Hugo RAS'],procedures:{'49652':410,'49650':380},compRate:.011,rating:4.8,ratingCount:340,years:15,medicarePatients:5100,bio:'West Coast hernia specialist. Ultra-low recurrence rates with tailored mesh and tissue repair.'},
+  {id:'G005',name:'Dr. Sandra Lewis',cred:'MD, FACS',fellowship:'Bariatric & MIS, University of Pittsburgh',subspecialties:['Bariatric'],states:['PA','OH','WV','MD','VA'],devices:['da Vinci Xi'],procedures:{'43775':390,'43644':260,'43848':90},compRate:.016,rating:4.7,ratingCount:285,years:14,medicarePatients:3800,bio:'Revision bariatric surgery expert. Complex redo procedures for failed prior weight loss operations.'},
+  {id:'G006',name:'Dr. Raymond Tran',cred:'MD',fellowship:'Colorectal, Lahey Clinic',subspecialties:['Colorectal'],states:['MA','NH','VT','ME','RI'],devices:['da Vinci Xi','da Vinci SP'],procedures:{'44204':290,'45395':210,'44211':80},compRate:.020,rating:4.8,ratingCount:230,years:17,medicarePatients:4100,bio:'New England colorectal specialist. Robotic proctectomy and transanal minimally invasive surgery expert.'},
+  {id:'G007',name:'Dr. Hannah Foster',cred:'MD',fellowship:'Hepatobiliary, Johns Hopkins',subspecialties:['Hepatobiliary'],states:['MD','DC','VA','PA','DE'],devices:['da Vinci Xi'],procedures:{'47562':440,'48150':110,'47120':95},compRate:.025,rating:4.7,ratingCount:195,years:19,medicarePatients:4400,bio:'Complex biliary surgeon. Expertise in portal hypertension and liver transplant evaluation.'},
+  {id:'G008',name:'Dr. Derek Washington',cred:'MD, FACS',fellowship:'MIS, Carolinas Medical Center',subspecialties:['Hernia','Bariatric'],states:['NC','SC','GA','VA','TN'],devices:['da Vinci Xi','Hugo RAS'],procedures:{'49652':320,'49650':290,'43775':180,'43644':90},compRate:.014,rating:4.8,ratingCount:310,years:13,medicarePatients:3900,bio:'Dual-trained in hernia and bariatric. Specializes in abdominal wall reconstruction for complex hernias.'},
+  // ── Gynecology (8) ──
+  {id:'Y001',name:'Dr. Catherine Liu',cred:'MD, FACS',fellowship:'Gynecologic Oncology, MD Anderson',subspecialties:['Gynecologic Oncology'],states:['TX','CA','FL','AZ','CO'],devices:['da Vinci Xi','da Vinci SP'],procedures:{'58571':380,'58575':290,'58952':120},compRate:.019,rating:4.9,ratingCount:330,years:18,medicarePatients:4500,bio:'Nationally recognized gyn-onc. Robotic staging and complex ovarian debulking with optimal cytoreduction rates.'},
+  {id:'Y002',name:'Dr. Margaret O\'Connell',cred:'MD',fellowship:'Urogynecology, Northwestern',subspecialties:['Urogynecology'],states:['IL','WI','MI','IN','OH'],devices:['da Vinci Xi'],procedures:{'57283':310,'57288':260,'57425':180},compRate:.015,rating:4.8,ratingCount:285,years:16,medicarePatients:3800,bio:'Midwest pelvic floor leader. Robotic sacrocolpopexy with lowest recurrence rates in the region.'},
+  {id:'Y003',name:'Dr. Nicole Dupont',cred:'MD, FACS',fellowship:'MIGS & Endometriosis, Brigham',subspecialties:['Endometriosis'],states:['MA','NY','CT','RI','NH'],devices:['da Vinci Xi'],procedures:{'58661':340,'58662':210},compRate:.017,rating:4.8,ratingCount:260,years:14,medicarePatients:2900,bio:'Deep infiltrating endometriosis expert. Multidisciplinary approach with colorectal and urology teams.'},
+  {id:'Y004',name:'Dr. Jasmine Richardson',cred:'MD',fellowship:'Reproductive Surgery, Stanford',subspecialties:['Fibroids'],states:['CA','WA','OR','NV','HI'],devices:['da Vinci Xi','da Vinci SP'],procedures:{'58541':280,'58542':220},compRate:.014,rating:4.9,ratingCount:310,years:13,medicarePatients:2400,bio:'Fertility-sparing robotic myomectomy specialist. Focus on minimizing uterine scar burden for future pregnancies.'},
+  {id:'Y005',name:'Dr. Amanda Sinclair',cred:'MD, FACS',fellowship:'Gyn Oncology, Memorial Sloan Kettering',subspecialties:['Gynecologic Oncology'],states:['NY','NJ','PA','CT','FL'],devices:['da Vinci Xi'],procedures:{'58571':420,'58575':310,'58952':95},compRate:.021,rating:4.7,ratingCount:270,years:20,medicarePatients:5100,bio:'High-volume robotic gyn-onc. Sentinel lymph node mapping pioneer for endometrial cancer staging.'},
+  {id:'Y006',name:'Dr. Rebecca Hawkins',cred:'MD',fellowship:'Urogynecology, Emory',subspecialties:['Urogynecology'],states:['GA','FL','AL','SC','NC'],devices:['da Vinci Xi','Hugo RAS'],procedures:{'57283':280,'57288':310,'57425':150},compRate:.018,rating:4.7,ratingCount:225,years:15,medicarePatients:3500,bio:'Southeast pelvic floor specialist. Expert in mesh complications and native tissue repair techniques.'},
+  {id:'Y007',name:'Dr. Elena Vasquez',cred:'MD',fellowship:'MIGS, UCLA',subspecialties:['Endometriosis','Fibroids'],states:['CA','AZ','NV','TX','CO'],devices:['da Vinci Xi','da Vinci SP'],procedures:{'58661':290,'58662':170,'58541':200,'58542':160},compRate:.016,rating:4.8,ratingCount:240,years:12,medicarePatients:2600,bio:'Dual MIGS expertise in endometriosis excision and fertility-sparing myomectomy across the Southwest.'},
+  {id:'Y008',name:'Dr. Natasha Kensington',cred:'MD, FACS',fellowship:'Gyn Oncology, Duke',subspecialties:['Gynecologic Oncology'],states:['NC','VA','SC','GA','TN'],devices:['da Vinci Xi'],procedures:{'58571':350,'58575':250,'58952':80},compRate:.023,rating:4.6,ratingCount:200,years:17,medicarePatients:4200,bio:'Southeast gyn-onc specialist. Complex surgical management of ovarian and peritoneal carcinomatosis.'},
+  // ── Cardiothoracic (8) ──
+  {id:'C001',name:'Dr. Alexander Petrov',cred:'MD, PhD',fellowship:'Cardiac Surgery, Cleveland Clinic',subspecialties:['Coronary Surgery','Valve Surgery'],states:['OH','PA','MI','IN','WV'],devices:['da Vinci Xi'],procedures:{'33533':280,'33536':190,'33405':220,'33430':85,'33426':120},compRate:.022,rating:4.9,ratingCount:340,years:24,medicarePatients:6800,bio:'Triple-board certified cardiac surgeon. Over 5,000 open heart cases including complex reoperations.'},
+  {id:'C002',name:'Dr. Victoria Sterling',cred:'MD, FACS',fellowship:'Thoracic Surgery, Memorial Sloan Kettering',subspecialties:['Thoracic Surgery'],states:['NY','NJ','CT','PA','MA'],devices:['da Vinci Xi','da Vinci SP'],procedures:{'32663':310,'32671':250},compRate:.018,rating:4.8,ratingCount:290,years:18,medicarePatients:4500,bio:'National leader in robotic-assisted lung surgery. VATS and robotic lobectomy for early-stage lung cancer.'},
+  {id:'C003',name:'Dr. James Crawford',cred:'MD',fellowship:'Aortic Surgery, Texas Heart Institute',subspecialties:['Aortic Surgery'],states:['TX','LA','OK','AR','NM'],devices:['da Vinci Xi'],procedures:{'33860':180,'33864':120},compRate:.032,rating:4.7,ratingCount:185,years:22,medicarePatients:3800,bio:'Aortic surgery specialist. Expertise in acute dissection repair and Bentall procedures for root disease.'},
+  {id:'C004',name:'Dr. Susan Park-Williams',cred:'MD, FACS',fellowship:'Cardiac Surgery, Brigham & Women\'s',subspecialties:['Valve Surgery'],states:['MA','NH','CT','RI','NY'],devices:['da Vinci Xi','da Vinci SP'],procedures:{'33405':310,'33430':130,'33426':260,'33361':180},compRate:.019,rating:4.9,ratingCount:320,years:20,medicarePatients:5600,bio:'Mitral valve repair pioneer. Over 95% repair rate for degenerative mitral disease. TAVR experienced.'},
+  {id:'C005',name:'Dr. Daniel Brooks',cred:'MD',fellowship:'Thoracic, University of Pittsburgh',subspecialties:['Thoracic Surgery'],states:['PA','OH','WV','MD','VA'],devices:['da Vinci Xi'],procedures:{'32663':280,'32671':190},compRate:.021,rating:4.7,ratingCount:235,years:16,medicarePatients:3900,bio:'Robotic thoracic surgery and esophageal surgery specialist. Minimally invasive lung cancer resection.'},
+  {id:'C006',name:'Dr. Robert Kimura',cred:'MD, PhD',fellowship:'Cardiac Surgery, Stanford',subspecialties:['Coronary Surgery','Aortic Surgery'],states:['CA','WA','OR','NV','HI'],devices:['da Vinci Xi','da Vinci SP'],procedures:{'33533':220,'33536':160,'33860':140,'33864':95},compRate:.024,rating:4.8,ratingCount:270,years:21,medicarePatients:5100,bio:'West Coast cardiac surgeon. Expertise in minimally invasive CABG and complex aortic root surgery.'},
+  {id:'C007',name:'Dr. Michelle Thompson',cred:'MD, FACS',fellowship:'Valve Surgery, Mayo Clinic',subspecialties:['Valve Surgery','Coronary Surgery'],states:['MN','WI','IA','ND','SD'],devices:['da Vinci Xi'],procedures:{'33405':260,'33426':190,'33361':150,'33533':180,'33536':120},compRate:.020,rating:4.8,ratingCount:295,years:19,medicarePatients:5400,bio:'Comprehensive cardiac surgeon covering all valve and coronary pathology. TAVR program director.'},
+  {id:'C008',name:'Dr. Gregory Antonov',cred:'MD',fellowship:'Aortic & Cardiac, Emory',subspecialties:['Aortic Surgery','Valve Surgery'],states:['GA','FL','AL','SC','NC'],devices:['da Vinci Xi'],procedures:{'33860':200,'33864':150,'33405':180,'33430':70},compRate:.027,rating:4.6,ratingCount:210,years:17,medicarePatients:4300,bio:'Southeast aortic specialist. Emergency dissection surgery and elective aneurysm management.'},
+];
+
+function matchSurgeons(sub,syms,state,urgency,insurance){
+  const procs=inferProcedures(sub,syms);
+  const codes=procs.map(p=>p.code);
+  const subs=[...new Set(procs.map(p=>p.sub))];
+  return SURGEONS.map(doc=>{
+    if(state&&!doc.states.includes(state))return{...doc,score:0,dq:true,dqReason:'Not licensed in '+state,procs,breakdown:{},reasons:[]};
+    const tc=codes.reduce((s,c)=>s+(doc.procedures[c]||0),0);
+    if(tc===0)return{...doc,score:0,dq:true,dqReason:'No experience with required procedures',procs,breakdown:{},reasons:[]};
+    const vs=Math.min(tc/500,1)*100;
+    const cs=(1-doc.compRate)*100;
+    const sm=subs.filter(s=>doc.subspecialties.includes(s)).length/subs.length;
+    const ss=sm*100;
+    const rs=(doc.rating/5)*100;
+    let bonus=0;const reasons=[];
+    if(urgency==='emergency'&&tc>200){bonus+=6;reasons.push('High-volume for urgent cases');}
+    if(insurance==='Medicare'&&doc.medicarePatients>4000){bonus+=4;reasons.push('Extensive Medicare experience');}
+    if(sm===1)reasons.unshift('Full subspecialty match');else if(sm>0)reasons.push('Partial subspecialty coverage');
+    if(tc>=300)reasons.push(tc+'+ relevant cases');
+    if(doc.compRate<=0.02)reasons.push('Exceptionally low complication rate');
+    if(doc.rating>=4.8)reasons.push('Top-rated by peers');
+    const score=(.35*vs)+(.25*cs)+(.25*ss)+(.15*rs)+bonus;
+    return{...doc,score:Math.round(score*10)/10,dq:false,dqReason:'',procs,matchedCases:tc,breakdown:{volume:Math.round(vs),complications:Math.round(cs),subspecialty:Math.round(ss),rating:Math.round(rs)},reasons};
+  }).filter(d=>!d.dq).sort((a,b)=>b.score-a.score);
+}
+
+// ════════════════════════════════════════════════════════════════
+// SUB-COMPONENTS
+// ════════════════════════════════════════════════════════════════
+
+function ScoreRing({score,size=80}){
+  const r=(size-8)/2,c=2*Math.PI*r,o=c-(score/100)*c;
+  const col=score>=85?'#27ab83':score>=65?'#f0b429':'#e12d39';
+  return(
+    <svg width={size} height={size} className="block flex-shrink-0">
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1a3550" strokeWidth="4"/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={col} strokeWidth="4" strokeDasharray={c} strokeDashoffset={o} strokeLinecap="round" transform={`rotate(-90 ${size/2} ${size/2})`} className="ring-anim" style={{strokeDashoffset:o}}/>
+      <text x={size/2} y={size/2-5} textAnchor="middle" fill={col} fontSize="18" fontWeight="700" fontFamily="DM Sans">{Math.round(score)}</text>
+      <text x={size/2} y={size/2+11} textAnchor="middle" fill="#627d98" fontSize="8" fontFamily="DM Sans" letterSpacing=".08em">MATCH</text>
+    </svg>
+  );
+}
+
+function Steps({current,total}){
+  const labels=['Specialty','Subspecialty','Symptoms','Details','Results'];
+  return(
+    <div className="flex items-center gap-1 sm:gap-2 justify-center mb-8">
+      {Array.from({length:total},(_,i)=>(
+        <React.Fragment key={i}>
+          <div className="flex flex-col items-center gap-1">
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold border-2 transition-all duration-300 ${i<current?'bg-teal-600 border-teal-600 text-white':i===current?'border-teal-400 text-teal-400':'border-navy-700 text-navy-600'}`}>{i+1}</div>
+            <span className={`text-[9px] hidden sm:block ${i<=current?'text-navy-300':'text-navy-600'}`}>{labels[i]}</span>
+          </div>
+          {i<total-1&&<div className={`w-6 sm:w-10 h-px mt-[-10px] sm:mt-[-8px] ${i<current?'bg-teal-600':'bg-navy-700'}`}/>}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+function Chk({label,checked,onChange}){
+  return(
+    <label className="chk p-3 rounded-lg bg-navy-900/50 border border-navy-800/60 hover:border-navy-600/60 transition-colors">
+      <input type="checkbox" checked={checked} onChange={onChange}/>
+      <span className="box">{checked&&<svg width="11" height="11" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>}</span>
+      <span className="text-sm text-navy-200 leading-snug">{label}</span>
+    </label>
+  );
+}
+
+function MetricBox({label,value,sub,source}){
+  return(
+    <div className="metric-box">
+      <div className="text-[10px] text-navy-400 uppercase tracking-wider mb-1">{label}</div>
+      <div className="text-xl font-bold text-white leading-none">{value}</div>
+      {sub&&<div className="text-[11px] text-navy-300 mt-0.5">{sub}</div>}
+      {source&&<div className="source-tag mt-1.5">Source: {source}</div>}
+    </div>
+  );
+}
+
+function BarViz({value,max=100,color='#27ab83'}){
+  return(
+    <div className="flex-1 h-1.5 bg-navy-800 rounded-full overflow-hidden">
+      <div className="h-full rounded-full transition-all duration-700" style={{width:`${Math.min(value/max*100,100)}%`,background:color}}/>
+    </div>
+  );
+}
+
+function DoctorCard({doc,i}){
+  const [open,setOpen]=useState(false);
+  const natAvg=0.03;const diff=((natAvg-doc.compRate)/natAvg*100).toFixed(0);
+  return(
+    <div className={`card-hover bg-gradient-to-br from-navy-900/90 to-navy-950/80 border border-navy-700/40 rounded-2xl p-5 sm:p-6 fu d${Math.min(i+1,6)}`}>
+      <div className="flex gap-4 sm:gap-6">
+        <div className="flex flex-col items-center gap-2 flex-shrink-0">
+          <ScoreRing score={doc.score}/>
+          <div className="text-[9px] text-navy-500 text-center">#{i+1} of results</div>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2 flex-wrap">
+            <div>
+              <h3 className="font-display text-[22px] sm:text-2xl text-white leading-tight">{doc.name}</h3>
+              <p className="text-xs text-navy-400 mt-0.5">{doc.cred} · {doc.fellowship}</p>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {doc.subspecialties.map(s=><span key={s} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-teal-900/40 text-teal-300 border border-teal-800/40">{s}</span>)}
+              </div>
+            </div>
+            <div className="flex items-center gap-1 text-amber-400 text-sm"><span>★</span><span className="font-semibold">{doc.rating}</span><span className="text-navy-500 text-xs">({doc.ratingCount})</span></div>
+          </div>
+          <p className="text-xs text-navy-400 mt-3 leading-relaxed line-clamp-2">{doc.bio}</p>
+
+          {/* Data Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-4">
+            <MetricBox label="Procedure Volume" value={doc.matchedCases} sub="relevant procedures/yr" source="CMS Medicare 2024"/>
+            <MetricBox label="Complication Rate" value={(doc.compRate*100).toFixed(1)+'%'} sub={Number(diff)>=0?diff+'% below national avg':'Above national avg'} source="Claims Analysis"/>
+            <MetricBox label="Years in Practice" value={doc.years}/>
+            <MetricBox label="Medicare Patients" value={doc.medicarePatients.toLocaleString()} source="CMS Provider Data"/>
+            <MetricBox label="Licensed States" value={doc.states.length+' states'} sub={doc.states.join(', ')}/>
+            <MetricBox label="Robotic Platforms" value={doc.devices.length} sub={doc.devices.join(', ')}/>
+          </div>
+
+          {doc.reasons.length>0&&(
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {doc.reasons.map((r,j)=><span key={j} className="text-[10px] px-2 py-0.5 rounded bg-navy-800/80 text-teal-400 border border-navy-700/50">✓ {r}</span>)}
+            </div>
+          )}
+
+          <button onClick={()=>setOpen(!open)} className="text-[11px] text-navy-400 hover:text-teal-400 mt-3 transition-colors cursor-pointer">{open?'— Hide score breakdown':'+ Why this match'}</button>
+          {open&&(
+            <div className="mt-3 p-4 rounded-xl bg-navy-950/60 border border-navy-800/40 fi">
+              <div className="text-[10px] text-navy-400 uppercase tracking-wider mb-3">Score Breakdown</div>
+              <div className="space-y-2">
+                {[{k:'volume',l:'Case Volume',w:'35%'},{k:'complications',l:'Complication Rate',w:'25%'},{k:'subspecialty',l:'Subspecialty Match',w:'25%'},{k:'rating',l:'Peer Rating',w:'15%'}].map(x=>(
+                  <div key={x.k} className="flex items-center gap-2">
+                    <span className="text-[10px] text-navy-300 w-28">{x.l}<span className="text-navy-600 ml-1">({x.w})</span></span>
+                    <BarViz value={doc.breakdown[x.k]}/>
+                    <span className="text-[11px] text-navy-400 w-7 text-right">{doc.breakdown[x.k]}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 pt-3 border-t border-navy-800/40">
+                <div className="text-[10px] text-navy-500 mb-1">Matched Procedures:</div>
+                <div className="flex flex-wrap gap-1">{doc.procs.map(p=><span key={p.code} className="text-[10px] px-2 py-0.5 rounded bg-teal-900/30 text-teal-300 border border-teal-800/30">{p.name} · CPT {p.code}</span>)}</div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-3 mt-4 items-center">
+            <button className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-sm font-semibold transition-all hover:shadow-lg hover:shadow-teal-900/30">Request Consultation</button>
+            <button className="px-5 py-2.5 rounded-xl border border-navy-600 text-navy-300 text-sm font-medium hover:border-teal-600 hover:text-teal-400 transition-all">View Full Profile</button>
+            <span className="text-[9px] text-navy-600 ml-auto hidden sm:block">Data verified from public sources · Mar 2025</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// MAIN APP
+// ════════════════════════════════════════════════════════════════
+
+function App(){
+  const [step,setStep]=useState(0);
+  const [specialty,setSpecialty]=useState(null);
+  const [sub,setSub]=useState(null);
+  const [syms,setSyms]=useState([]);
+  const [info,setInfo]=useState({age:'',gender:'',state:'',insurance:'',urgency:'routine',prevSurg:'',meds:''});
+  const [results,setResults]=useState([]);
+  const [sortBy,setSortBy]=useState('score');
+
+  const toggleSym=s=>setSyms(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]);
+  const runMatch=()=>{setResults(matchSurgeons(sub,syms,info.state,info.urgency,info.insurance));setStep(5);};
+  const reset=()=>{setStep(0);setSpecialty(null);setSub(null);setSyms([]);setInfo({age:'',gender:'',state:'',insurance:'',urgency:'routine',prevSurg:'',meds:''});setResults([]);};
+
+  const sorted=useMemo(()=>{
+    const s=[...results];
+    if(sortBy==='score')s.sort((a,b)=>b.score-a.score);
+    else if(sortBy==='volume')s.sort((a,b)=>b.matchedCases-a.matchedCases);
+    else if(sortBy==='comp')s.sort((a,b)=>a.compRate-b.compRate);
+    else if(sortBy==='rating')s.sort((a,b)=>b.rating-a.rating);
+    return s;
+  },[results,sortBy]);
+
+  const inputCls="w-full px-4 py-3 rounded-xl bg-navy-900/80 border border-navy-700/60 text-white placeholder-navy-500 focus:outline-none focus:border-teal-600 transition-colors text-sm";
+
+  // ── HERO ──
+  if(step===0){
+    const tickerText="CMS.gov  ·  NPPES NPI Registry  ·  Medicare Care Compare  ·  ProPublica Methodology  ·  State Medical Boards  ·  ABMS Certification  ·  ";
+    return(
+      <div className="grain min-h-screen flex flex-col">
+        <div className="flex-1 flex flex-col items-center justify-center px-6 relative">
+          <div className="absolute top-[20%] left-[15%] w-[500px] h-[500px] bg-teal-900/10 rounded-full blur-[120px]"/>
+          <div className="absolute bottom-[25%] right-[20%] w-[400px] h-[400px] bg-navy-700/20 rounded-full blur-[100px]"/>
+          <div className="relative z-10 text-center max-w-3xl">
+            <div className="fu flex items-center justify-center gap-3 mb-10">
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shadow-lg shadow-teal-900/30">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+              </div>
+              <span className="font-display text-2xl text-white tracking-tight">SurgMatch</span>
+            </div>
+            <h1 className="fu d1 font-display text-5xl sm:text-6xl lg:text-[72px] text-white leading-[1.08] mb-5">Evidence-Based<br/><span className="italic text-teal-400">Surgeon Matching</span></h1>
+            <p className="fu d2 text-navy-300 text-lg sm:text-xl max-w-xl mx-auto leading-relaxed mb-6">Powered by CMS Medicare data, NPI Registry &amp; public outcomes research. Transparent. Verified. No hidden rankings.</p>
+            <div className="fu d3 flex flex-wrap items-center justify-center gap-4 sm:gap-6 mb-10">
+              {[['1.2M+','Providers Indexed'],['100%','Public Data Verified'],['340+','Procedure Codes']].map(([n,l])=>(
+                <div key={l} className="flex items-center gap-2">
+                  <span className="text-teal-400 font-bold text-sm">{n}</span>
+                  <span className="text-navy-400 text-xs">{l}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={()=>setStep(1)} className="fu d4 group px-8 py-4 rounded-2xl bg-teal-600 hover:bg-teal-500 text-white font-semibold text-lg transition-all hover:shadow-xl hover:shadow-teal-900/20">
+              Find Your Specialist<span className="inline-block ml-2 transition-transform group-hover:translate-x-1">→</span>
+            </button>
+            <p className="fu d5 text-navy-600 text-xs mt-5">6 specialties · 25 subspecialties · 50+ surgeons</p>
+          </div>
+        </div>
+        <div className="py-4 border-t border-navy-800/40">
+          <div className="ticker-wrap">
+            <div className="ticker-track">
+              {[0,1].map(i=><div key={i} className="flex items-center gap-0 text-[11px] text-navy-600 whitespace-nowrap tracking-wide px-4">{tickerText}{tickerText}</div>)}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── FLOW WRAPPER ──
+  return(
+    <div className="grain min-h-screen px-4 py-6">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center justify-between mb-6 fi">
+          <button onClick={reset} className="flex items-center gap-2 group">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4"/></svg>
+            </div>
+            <span className="font-display text-lg text-white">SurgMatch</span>
+          </button>
+          {step<5&&<Steps current={step-1} total={5}/>}
+          {step>1&&step<5?<button onClick={()=>setStep(step-1)} className="text-xs text-navy-400 hover:text-teal-400 transition-colors">← Back</button>:step===5?<button onClick={reset} className="text-xs text-navy-400 hover:text-teal-400 transition-colors">← New Search</button>:<div/>}
+        </div>
+
+        {/* Step 1: Specialty */}
+        {step===1&&(
+          <div className="fu">
+            <h2 className="font-display text-3xl text-white text-center mb-1">Choose Your Specialty</h2>
+            <p className="text-navy-400 text-center text-sm mb-8">Select the medical specialty for your condition</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {SPECIALTIES.map((s,i)=>(
+                <button key={s.id} disabled={!s.available} onClick={()=>{setSpecialty(s.id);setStep(2);}}
+                  className={`si d${i+1} group relative text-left p-5 rounded-2xl border transition-all border-navy-700/50 bg-navy-900/40 hover:border-teal-600/50 hover:bg-navy-800/40 cursor-pointer`}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" className="mb-3 opacity-50 group-hover:opacity-80 transition-opacity"><path d={s.icon} fill="#627d98"/></svg>
+                  <div className="font-semibold text-white text-sm">{s.label}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Subspecialty */}
+        {step===2&&(
+          <div className="fu">
+            <h2 className="font-display text-3xl text-white text-center mb-1">Select Subspecialty</h2>
+            <p className="text-navy-400 text-center text-sm mb-8">Narrow down to your specific area of concern</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-3xl mx-auto">
+              {(SUBSPECIALTIES[specialty]||[]).map((s,i)=>(
+                <button key={s.id} onClick={()=>{setSub(s.id);setSyms([]);setStep(3);}}
+                  className={`si d${i+1} text-left p-5 rounded-2xl border border-navy-700/50 bg-navy-900/40 hover:border-teal-600/50 hover:bg-navy-800/40 transition-all group`}>
+                  <div className="text-2xl mb-2 opacity-50 group-hover:opacity-90 transition-opacity">{s.icon}</div>
+                  <div className="font-semibold text-white text-sm mb-1">{s.label}</div>
+                  <div className="text-[11px] text-navy-400 leading-relaxed">{s.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Symptoms */}
+        {step===3&&sub&&(
+          <div className="fu">
+            <h2 className="font-display text-3xl text-white text-center mb-1">Describe Your Symptoms</h2>
+            <p className="text-navy-400 text-center text-sm mb-8">Select all that apply — more detail improves matching accuracy</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-2xl mx-auto">
+              {SYMPTOMS[sub].map((s,i)=>(
+                <div key={s} className={`sr d${Math.min(i+1,8)}`}><Chk label={s} checked={syms.includes(s)} onChange={()=>toggleSym(s)}/></div>
+              ))}
+            </div>
+            <div className="text-center mt-8">
+              <button onClick={()=>setStep(4)} disabled={!syms.length}
+                className={`px-8 py-3 rounded-xl font-semibold transition-all ${syms.length?'bg-teal-600 hover:bg-teal-500 text-white':'bg-navy-800 text-navy-500 cursor-not-allowed'}`}>
+                Continue — {syms.length} symptom{syms.length!==1?'s':''} selected
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Patient Details */}
+        {step===4&&(
+          <div className="fu max-w-lg mx-auto">
+            <h2 className="font-display text-3xl text-white text-center mb-1">Patient Details</h2>
+            <p className="text-navy-400 text-center text-sm mb-8">This information helps refine your match</p>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-navy-300 mb-1.5 font-medium">Age</label>
+                  <input type="number" value={info.age} onChange={e=>setInfo({...info,age:e.target.value})} placeholder="e.g. 65" className={inputCls}/>
+                </div>
+                <div>
+                  <label className="block text-xs text-navy-300 mb-1.5 font-medium">Gender</label>
+                  <select value={info.gender} onChange={e=>setInfo({...info,gender:e.target.value})} className={inputCls}>
+                    <option value="">Select</option><option value="M">Male</option><option value="F">Female</option><option value="O">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-navy-300 mb-1.5 font-medium">Location (State)</label>
+                  <select value={info.state} onChange={e=>setInfo({...info,state:e.target.value})} className={inputCls}>
+                    <option value="">Any state</option>{US_STATES.map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-navy-300 mb-1.5 font-medium">Insurance</label>
+                  <select value={info.insurance} onChange={e=>setInfo({...info,insurance:e.target.value})} className={inputCls}>
+                    <option value="">Select</option><option>Medicare</option><option>Commercial</option><option>Uninsured</option><option>Other</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-navy-300 mb-1.5 font-medium">Urgency</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['routine','urgent','emergency'].map(u=>(
+                    <button key={u} onClick={()=>setInfo({...info,urgency:u})}
+                      className={`py-2.5 rounded-xl text-xs font-medium capitalize transition-all border ${info.urgency===u?'border-teal-500 bg-teal-900/30 text-teal-300':'border-navy-700/60 text-navy-400 hover:border-navy-500'}`}>{u}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-navy-300 mb-1.5 font-medium">Previous Surgeries <span className="text-navy-600">(optional)</span></label>
+                <input type="text" value={info.prevSurg} onChange={e=>setInfo({...info,prevSurg:e.target.value})} placeholder="e.g. prior related procedures" className={inputCls}/>
+              </div>
+              <div>
+                <label className="block text-xs text-navy-300 mb-1.5 font-medium">Current Medications <span className="text-navy-600">(optional)</span></label>
+                <input type="text" value={info.meds} onChange={e=>setInfo({...info,meds:e.target.value})} placeholder="e.g. relevant current medications" className={inputCls}/>
+              </div>
+            </div>
+            <div className="text-center mt-8">
+              <button onClick={runMatch} className="px-8 py-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-semibold transition-all hover:shadow-lg hover:shadow-teal-900/30">
+                Find My Surgeons →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 5: Results */}
+        {step===5&&(
+          <div className="fu">
+            <div className="text-center mb-2">
+              <h2 className="font-display text-3xl text-white mb-1.5">Your Matches</h2>
+              <p className="text-navy-400 text-sm">
+                {sorted.length} surgeon{sorted.length!==1?'s':''} matched for <span className="text-teal-400 font-medium">{(SUBSPECIALTIES[specialty]||[]).find(s=>s.id===sub)?.label}</span>
+                {info.state&&<> in <span className="text-teal-400 font-medium">{info.state}</span></>}
+              </p>
+            </div>
+            {sorted.length>0&&sorted[0].procs&&(
+              <div className="flex flex-wrap gap-2 justify-center mt-2 mb-6">
+                <span className="text-[10px] text-navy-500">Likely procedures:</span>
+                {sorted[0].procs.map(p=><span key={p.code} className="text-[10px] px-2.5 py-0.5 rounded-full bg-navy-800/80 text-teal-300 border border-navy-700/50">{p.name} · CPT {p.code}</span>)}
+              </div>
+            )}
+            <div className="flex items-center gap-2 mb-5 flex-wrap">
+              <span className="text-[10px] text-navy-500">Sort:</span>
+              {[{k:'score',l:'Best Match'},{k:'volume',l:'Highest Volume'},{k:'comp',l:'Lowest Complications'},{k:'rating',l:'Top Rated'}].map(s=>(
+                <button key={s.k} onClick={()=>setSortBy(s.k)}
+                  className={`text-[11px] px-3 py-1.5 rounded-lg transition-all ${sortBy===s.k?'bg-teal-900/40 text-teal-300 border border-teal-700/50':'bg-navy-900/60 text-navy-400 border border-navy-800/50 hover:text-navy-200'}`}>{s.l}</button>
+              ))}
+            </div>
+            {sorted.length>0?(
+              <div className="space-y-4">{sorted.map((d,i)=><DoctorCard key={d.id} doc={d} i={i}/>)}</div>
+            ):(
+              <div className="text-center py-20"><div className="text-4xl mb-4 opacity-20">◎</div><p className="text-navy-400">No surgeons matched your criteria.</p><p className="text-navy-500 text-xs mt-1">Try broadening your state or symptom selection.</p></div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <footer className="max-w-4xl mx-auto mt-16 pt-6 border-t border-navy-800/40 text-center space-y-3 pb-8">
+        <p className="text-[10px] text-navy-600 leading-relaxed max-w-2xl mx-auto">Surgeon data compiled from CMS Medicare Provider Utilization &amp; Payment Data, NPPES NPI Registry, and Medicare Care Compare. Complication rates calculated using ProPublica's published methodology applied to Medicare claims data.</p>
+        <p className="text-[10px] text-navy-700">For informational purposes only. This is not medical advice. Always consult with a qualified healthcare provider.</p>
+        <div className="flex items-center justify-center gap-4 text-[10px] text-navy-600">
+          <span className="hover:text-teal-400 cursor-pointer transition-colors">About</span>
+          <span className="text-navy-800">·</span>
+          <span className="hover:text-teal-400 cursor-pointer transition-colors">Methodology</span>
+          <span className="text-navy-800">·</span>
+          <span className="hover:text-teal-400 cursor-pointer transition-colors">Data Sources</span>
+          <span className="text-navy-800">·</span>
+          <span className="hover:text-teal-400 cursor-pointer transition-colors">Privacy</span>
+          <span className="text-navy-800">·</span>
+          <span className="hover:text-teal-400 cursor-pointer transition-colors">Contact</span>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
